@@ -120,6 +120,7 @@ const MessagesPage = () => {
   };
 
   const fetchMessages = async () => {
+    const capturedUser = currentUser;
     // Guard: Only fetch if currentUser exists
     if (!currentUser) {
       setLoading(false);
@@ -127,18 +128,18 @@ const MessagesPage = () => {
     }
 
     try {
-      const res = await api.get(`/messages/user/${currentUser._id}`);
+      const res = await api.get(`/messages/user/${capturedUser!._id}`);
       const messages: Message[] = res.data;
 
       // Group messages by conversation and filter deleted messages correctly
       const conversationMap = new Map<string, Conversation>();
       messages.forEach(message => {
         // Skip deleted messages unless current user is sender
-        if (message.isDeleted && message.senderId._id !== currentUser._id) {
+        if (message.isDeleted && message.senderId._id !== capturedUser!._id) {
           return;
         }
 
-        const otherUser = message.senderId._id === currentUser._id ? message.receiverId : message.senderId;
+        const otherUser = message.senderId._id === capturedUser!._id ? message.receiverId : message.senderId;
         // Use email as key to ensure unique conversations per user
         const key = otherUser.email.toLowerCase();
 
@@ -154,7 +155,7 @@ const MessagesPage = () => {
         // Add message to thread
         conversation.messages.push(message);
         // Update last message if this is newer and not deleted (or if sender)
-        if ((!message.isDeleted || message.senderId._id === currentUser._id) && 
+        if ((!message.isDeleted || message.senderId._id === capturedUser!._id) && 
             (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt))) {
           conversation.lastMessage = message;
         }
@@ -388,27 +389,27 @@ const MessagesPage = () => {
                       selectedConversation.messages.map((message) => (
                         <div
                           key={message._id}
-                          className={`flex ${message.senderId._id === currentUser._id ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${message.senderId._id === capturedUser!._id ? 'justify-end' : 'justify-start'}`}
                         >
                           <div className={`relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                              message.senderId._id === currentUser._id
+                              message.senderId._id === capturedUser!._id
                                 ? 'bg-orange-500 text-white'
                                 : 'bg-slate-700 text-gray-200'
                             }`}>
                             {/* If message is deleted and current user is sender show placeholder */}
-                            {message.isDeleted && message.senderId._id === currentUser._id ? (
+                            {message.isDeleted && message.senderId._id === capturedUser!._id ? (
                               <p className="text-sm text-gray-300 italic">You unsent this message</p>
                             ) : (
                               <p className="text-sm">{message.content}</p>
                             )}
                             <p className={`text-xs mt-1 ${
-                              message.senderId._id === currentUser._id ? 'text-orange-100' : 'text-gray-400'
+                              message.senderId._id === capturedUser!._id ? 'text-orange-100' : 'text-gray-400'
                             }`}>
                               {new Date(message.createdAt).toLocaleTimeString()}
                             </p>
 
                             {/* Unsend button for sender and only if within allowed state */}
-                            {message.senderId._id === currentUser._id && !message.isDeleted && (
+                            {message.senderId._id === capturedUser!._id && !message.isDeleted && (
                               <button
                                 onClick={() => openUnsendModal(message._id)}
                                 className="absolute -top-2 -right-8 text-xs text-gray-400 hover:text-red-400"
