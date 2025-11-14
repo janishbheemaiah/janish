@@ -52,6 +52,8 @@ const MessagesPage = () => {
       // Auto-refresh messages every 15 seconds to catch updates
       const interval = setInterval(fetchMessages, 15000);
       return () => clearInterval(interval);
+    } else {
+      setLoading(false);
     }
   }, [currentUser]);
 
@@ -90,21 +92,21 @@ const MessagesPage = () => {
       const res = await api.get(`/messages/with/${otherUserId}`);
       const messages: Message[] = res.data;
 
-        // Get user info first
-        const userRes = await api.get(`/users/${otherUserId}`);
-        const userData = userRes.data;
+      // Get user info first
+      const userRes = await api.get(`/users/${otherUserId}`);
+      const userData = userRes.data;
 
       // Filter messages to hide deleted ones from receiver
       const filteredMessages = messages.filter(message => 
         !message.isDeleted || message.senderId._id === currentUser!._id
       );
 
-        // Use the fetched user data
-        const otherUser = {
-          _id: userData._id,
-          name: userData.name,
-          email: userData.email
-        };
+      // Use the fetched user data
+      const otherUser = {
+        _id: userData._id,
+        name: userData.name,
+        email: userData.email
+      };
 
       setSelectedConversation({
         user: otherUser,
@@ -118,23 +120,29 @@ const MessagesPage = () => {
   };
 
   const fetchMessages = async () => {
+    // Guard: Only fetch if currentUser exists
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await api.get(`/messages/user/${currentUser!._id}`);
+      const res = await api.get(`/messages/user/${currentUser._id}`);
       const messages: Message[] = res.data;
 
       // Group messages by conversation and filter deleted messages correctly
       const conversationMap = new Map<string, Conversation>();
       messages.forEach(message => {
         // Skip deleted messages unless current user is sender
-        if (message.isDeleted && message.senderId._id !== currentUser!._id) {
+        if (message.isDeleted && message.senderId._id !== currentUser._id) {
           return;
         }
 
-        const otherUser = message.senderId._id === currentUser!._id ? message.receiverId : message.senderId;
-          // Use email as key to ensure unique conversations per user
-          const key = otherUser.email.toLowerCase();
+        const otherUser = message.senderId._id === currentUser._id ? message.receiverId : message.senderId;
+        // Use email as key to ensure unique conversations per user
+        const key = otherUser.email.toLowerCase();
 
-          if (!conversationMap.has(key)) {
+        if (!conversationMap.has(key)) {
           conversationMap.set(key, {
             user: otherUser,
             messages: [],
@@ -146,7 +154,7 @@ const MessagesPage = () => {
         // Add message to thread
         conversation.messages.push(message);
         // Update last message if this is newer and not deleted (or if sender)
-        if ((!message.isDeleted || message.senderId._id === currentUser!._id) && 
+        if ((!message.isDeleted || message.senderId._id === currentUser._id) && 
             (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt))) {
           conversation.lastMessage = message;
         }
@@ -167,7 +175,7 @@ const MessagesPage = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!selectedConversation || !newMessage.trim()) return;
+    if (!selectedConversation || !newMessage.trim() || !currentUser) return;
 
     try {
       await api.post('/messages', {
@@ -266,6 +274,16 @@ const MessagesPage = () => {
     );
   }
 
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-400">Please log in to view messages</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -305,7 +323,7 @@ const MessagesPage = () => {
                         setSearchParams({ user: conversation.user._id });
                         // Mark unread messages as read
                         conversation.messages.forEach(msg => {
-                          if (!msg.isRead && msg.receiverId._id === currentUser!._id) {
+                          if (!msg.isRead && msg.receiverId._id === currentUser._id) {
                             markAsRead(msg._id);
                           }
                         });
@@ -362,41 +380,47 @@ const MessagesPage = () => {
                 <CardContent className="flex-1 flex flex-col p-0">
                   {/* Messages */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {selectedConversation.messages.map((message) => (
-                      <div
-                        key={message._id}
-                        className={`flex ${message.senderId._id === currentUser!._id ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div className={`relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.senderId._id === currentUser!._id
-                              ? 'bg-orange-500 text-white'
-                              : 'bg-slate-700 text-gray-200'
-                          }`}>
-                          {/* If message is deleted and current user is sender show placeholder */}
-                          {message.isDeleted && message.senderId._id === currentUser!._id ? (
-                            <p className="text-sm text-gray-300 italic">You unsent this message</p>
-                          ) : (
-                            <p className="text-sm">{message.content}</p>
-                          )}
-                          <p className={`text-xs mt-1 ${
-                            message.senderId._id === currentUser!._id ? 'text-orange-100' : 'text-gray-400'
-                          }`}>
-                            {new Date(message.createdAt).toLocaleTimeString()}
-                          </p>
-
-                          {/* Unsend button for sender and only if within allowed state */}
-                          {message.senderId._id === currentUser!._id && !message.isDeleted && (
-                            <button
-                              onClick={() => openUnsendModal(message._id)}
-                              className="absolute -top-2 -right-8 text-xs text-gray-400 hover:text-red-400"
-                              title="Unsend message"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
+                    {selectedConversation.messages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <p className="text-gray-400">No messages yet. Start the conversation!</p>
                       </div>
-                    ))}
+                    ) : (
+                      selectedConversation.messages.map((message) => (
+                        <div
+                          key={message._id}
+                          className={`flex ${message.senderId._id === currentUser._id ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                              message.senderId._id === currentUser._id
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-slate-700 text-gray-200'
+                            }`}>
+                            {/* If message is deleted and current user is sender show placeholder */}
+                            {message.isDeleted && message.senderId._id === currentUser._id ? (
+                              <p className="text-sm text-gray-300 italic">You unsent this message</p>
+                            ) : (
+                              <p className="text-sm">{message.content}</p>
+                            )}
+                            <p className={`text-xs mt-1 ${
+                              message.senderId._id === currentUser._id ? 'text-orange-100' : 'text-gray-400'
+                            }`}>
+                              {new Date(message.createdAt).toLocaleTimeString()}
+                            </p>
+
+                            {/* Unsend button for sender and only if within allowed state */}
+                            {message.senderId._id === currentUser._id && !message.isDeleted && (
+                              <button
+                                onClick={() => openUnsendModal(message._id)}
+                                className="absolute -top-2 -right-8 text-xs text-gray-400 hover:text-red-400"
+                                title="Unsend message"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
 
                   {/* Message Input */}
@@ -422,42 +446,42 @@ const MessagesPage = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="bg-slate-800 border-slate-700 h-[600px] flex items-center justify-center">
-                <div className="text-center">
-                  <MessageCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-white text-xl font-semibold mb-2">Select a conversation</h3>
-                  <p className="text-gray-400">Choose a conversation from the list to start messaging</p>
-                </div>
+              <Card className="bg-slate-800 border-slate-700 h-[600px] flex flex-col items-center justify-center">
+                <MessageCircle className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-white text-lg font-semibold mb-2">Select a conversation</h3>
+                <p className="text-gray-400">Choose a message thread to start chatting</p>
               </Card>
             )}
           </div>
-
-          {/* Unsend Confirmation Modal */}
-          <Dialog open={unsendModalOpen} onOpenChange={closeUnsendModal}>
-            <DialogContent className="bg-slate-800 border-slate-700">
-              <DialogHeader>
-                <DialogTitle className="text-white">Unsend Message?</DialogTitle>
-                <DialogDescription>
-                  This message will be removed for everyone. You will have 10 seconds to undo this action.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end space-x-2 mt-4">
-                <Button variant="outline" onClick={closeUnsendModal}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleUnsendConfirmed}
-                  className="bg-red-500 hover:bg-red-600"
-                >
-                  Unsend
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
         </div>
       </div>
+
+      {/* Unsend Confirmation Modal */}
+      <Dialog open={unsendModalOpen} onOpenChange={setUnsendModalOpen}>
+        <DialogContent className="bg-slate-800 border border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-white">Unsend Message?</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              This action cannot be undone. The message will be removed for everyone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={closeUnsendModal}
+              className="border-slate-600 text-gray-300 hover:bg-slate-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUnsendConfirmed}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Unsend
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
