@@ -154,7 +154,7 @@ const MessagesPage = () => {
         // Add message to thread
         conversation.messages.push(message);
         // Update last message if this is newer and not deleted (or if sender)
-        if ((!message.isDeleted || message.senderId._id === capturedUser!._id) && 
+          if ((!message.isDeleted || message.senderId._id === currentUser._id) && 
             (!conversation.lastMessage || new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt))) {
           conversation.lastMessage = message;
         }
